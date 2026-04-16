@@ -344,37 +344,273 @@ GROUP BY
 		WHEN o.order_id IS NULL THEN 'Orphan'
 		ELSE 'Valid'
 	END
-	 
 
-select * from sales.orders
-select * from core.dim_region
-select * from products.products
-select * from sales.order_items
-select * from stores.stores
+-- 22)
+select e.employee_id, e.first_name, d.dept_name, s.store_name, r.region_name, COUNT(t.ticket_id) as total_tickets, COALESCE(TO_CHAR(AVG(AGE(t.resolved_date, t.created_date)), 'DD "days" HH24 "hrs" MI "mins"' ),'No Tickets / Not Resolved') as avg_resolution_time from stores.employees e
+	LEFT JOIN core.dim_department d USING(dept_id)
+	LEFT JOIN stores.stores s USING(store_id)
+	LEFT JOIN core.dim_region r using(region_id)
+	LEFT JOIN support.tickets t ON t.agent_id = e.employee_id 
+GROUP BY e.employee_id, e.first_name, d.dept_name, s.store_name, r.region_name
+ORDER BY e.employee_id
 
-select * from support.tickets
-select * from hr.attendance
-select * from core.dim_region
-select * from stores.stores
+-- 23)
+select s.store_id, s.store_name, r.region_name, e.employee_count, o.order_count , o.revenue, coalesce(o.avg_order_value, 0) , o.return_count, o.return_rate from stores.stores s
+	LEFT JOIN core.dim_region r USING(region_id)
+	LEFT JOIN (
+		select store_id, count(employee_id) as employee_count from stores.employees
+		GROUP BY store_id
+	) e USING(store_id)
+	LEFT JOIN (
+		select store_id, 
+			count(order_id) as order_count,
+			sum(net_total) as revenue,
+			avg(net_total) as avg_order_value,
+			count(case when order_status = 'Returned' then 1 else null end) as return_count, 
+			ROUND(count(case when order_status = 'Returned' then 1 else null end)::numeric/count(*),3) as return_rate 
+			from sales.orders 
+			GROUP BY store_id ) o USING(store_id)
+ORDER BY store_id
 
-select * from core.dim_brand
-select * from core.dim_regions
-select * from products.products
-select * from sales.order_items
+-- 24)
+select 
+	extract(month from order_date) as month, 
+	count(order_id) as total_order, 
+	sum(net_total) as revenue,
+	count(DISTINCT cust_id) as unique_customers,
+	ROUND(avg(net_total),2) as avg_order_value
+from sales.orders
+GROUP BY EXTRACT(month from order_date)
+ORDER BY month
 
-select * from customers.customers
-select * from sales.order_items
-select * from products.products
-select * from stores.stores
-select * from sales.payments
-select * from stores.employees
+-- 25)
+select 
+		c.customer_id,
+		c.first_name,
+		c.email,
+		coalesce(m.tier_id, 0) tier_id,
+		o.total_orders,
+		o.total_spend,
+		o.avg_order_value,
+		o.last_order_date,
+		CURRENT_DATE - o.last_order_date as recency,
+		coalesce(t.total_tickets, 0) as total_tickets,
+		CASE
+			WHEN o.total_spend > 100000 AND CURRENT_DATE - o.last_order_date < 10 THEN 'Good'
+			WHEN o.total_spend > 50000 THEN 'Average'
+			ELSE 'Bad'
+		END as health
+	from customers.customers c
+	LEFT JOIN loyalty.members m USING(customer_id)
+	LEFT JOIN (
+		select 
+			cust_id as customer_id, 
+			count(order_id) as total_orders, 
+			sum(net_total) as total_spend, 
+			ROUND(avg(net_total),2) as avg_order_value, 
+			max(order_date) as last_order_date 
+		from sales.orders GROUP BY cust_id
+	) o USING(customer_id)
+	LEFT JOIN (
+		select 
+			customer_id, 
+			COALESCE(count(*), 0)  as total_tickets
+		from support.tickets group by customer_id
+	) t USING(customer_id)
 
-select * from sales.orders
-select * from sales.shipments
-select * from sales.payments
-select * from customers.customers
-select * from customers.reviews
-select * from loyalty.members
+-- 26)
+select 
+		s.store_id, 
+		s.store_name, 
+		r.region_name, 
+		s.city, 
+		e.employee_count, 
+		e.salary_budget, 
+		o.order_count, 
+		o.revenue, 
+		o.unique_customers,
+		o.return_rate,
+		tic.tickets
+	from stores.stores s
+	LEFT JOIN core.dim_region r USING(region_id)
+	LEFT JOIN (
+		select 
+			store_id, 
+			count(employee_id) as employee_count,
+			sum(salary) as salary_budget
+		from stores.employees
+		GROUP BY store_id
+	) e USING(store_id)
+	LEFT JOIN (
+		select store_id, 
+			count(order_id) as order_count,
+			count(DISTINCT cust_id) as unique_customers,
+			sum(net_total) as revenue,
+			avg(net_total) as avg_order_value,
+			ROUND(count(case when order_status = 'Returned' then 1 else null end)::numeric/count(*),3) as return_rate 
+		from sales.orders 
+		GROUP BY store_id 
+	) o USING(store_id)
+	LEFT JOIN (
+		select 	
+			e.store_id,
+			count(*) as tickets 
+		from support.tickets t
+		LEFT JOIN stores.employees e ON e.employee_id = t.agent_id
+		GROUP BY e.store_id
+	) tic USING(store_id)
+ORDER BY store_id
 
-select * from products.products
-select * from SALES.ORDER_ITEMS
+-- 27)
+	select * from sales.orders o
+		INNER JOIN sales.order_items oi USING(order_id)
+		INNER JOIN products.products p ON p.product_id = oi.prod_id  
+	-- total rows 375202
+	-- returns only matching records across all tables
+	-- rows exist only where order_id and product_id are valid in all tables
+	-- no NULL values in joined columns
+	-- skips any unmatched (orphan) records
+	-- row count = only valid relationships
+	
+	select * from sales.orders o
+		LEFT JOIN sales.order_items oi USING(order_id)
+		LEFT JOIN products.products p ON p.product_id = oi.prod_id
+	-- total rows 375202
+	-- returns all orders (left table is fully preserved)
+	-- if order has no order_items → oi columns = NULL
+	-- if order_item has no valid product → product columns = NULL
+	-- unmatched rows are NOT removed (only left side guaranteed)
+	-- row count = at least number of orders (can increase due to 1:N)
+	
+	select * from sales.orders o
+		FULL JOIN sales.order_items oi USING(order_id)
+		FULL JOIN products.products p ON p.product_id = oi.prod_id  
+	-- total rows 375806 (more, because there are some preoducs that are never ordered)
+	-- returns all records from all tables (orders + order_items + products)
+	-- unmatched rows from any table are included with NULLs
+	-- helps identify:
+	--   - orders without items
+	--   - order_items without orders
+	--   - order_items with invalid products
+	--   - products never ordered
+	-- row count = highest (includes all matches + all mismatches)
+
+-- 28)
+	-- customers.customers.customer_id -> sales.orders.cust_id
+	select 
+		CASE
+			WHEN o.cust_id IS NULL THEN 'Orphan Customers (Never Ordered)'
+			WHEN c.customer_id IS NULL THEN 'Orphan Order'
+			else 'Good Records'
+		END as status,
+		COUNT(*)
+	from customers.customers c
+	FULL JOIN sales.orders o ON o.cust_id = c.customer_id
+	GROUP BY 
+		CASE
+			WHEN o.cust_id IS NULL THEN 'Orphan Customers (Never Ordered)'
+			WHEN c.customer_id IS NULL THEN 'Orphan Order'
+			else 'Good Records'
+		END
+	
+	-- sales.orders.order_id -> sales.order_items.order_id
+	select 
+		CASE 
+			WHEN oi.order_id IS NULL THEN 'Orphan Order'
+			WHEN o.order_id IS NULL THEN 'Orphan Order Item'
+			else 'Good Records'
+		END as status,
+		COUNT(*)
+	from sales.orders o
+	FULL JOIN sales.order_items oi ON oi.order_id = o.order_id
+	GROUP BY 
+		CASE 
+			WHEN oi.order_id IS NULL THEN 'Orphan Order'
+			WHEN o.order_id IS NULL THEN 'Orphan Order Item'
+			else 'Good Records'
+		END
+	
+	-- products.products.product_id -> sales.order_items.prod_id
+	select 
+		CASE
+			WHEN oi.prod_id IS NULL THEN 'Never Ordered Product' 
+			WHEN p.product_id IS NULL THEN 'Orphan Order Item' 
+			else 'Good Records'
+		END as status,
+		COUNT(*)
+	from products.products p
+	FULL JOIN sales.order_items oi ON oi.prod_id = p.product_id
+	GROUP BY
+		CASE
+			WHEN oi.prod_id IS NULL THEN 'Never Ordered Product' 
+			WHEN p.product_id IS NULL THEN 'Orphan Order Item' 
+			else 'Good Records'
+		END
+	
+	-- sales.orders.order_id -> sales.payments.order_id
+	select 
+		CASE
+			WHEN p.order_id IS NULL THEN 'No Payments/Pending'
+			WHEN o.order_id IS NULL THEN 'Orphan Payments'
+			else 'Good Records/Paid'
+		END as status,
+		COUNT(*)
+	from sales.orders o
+	FULL JOIN sales.payments p ON p.order_id = o.order_id
+	GROUP BY 
+		CASE
+			WHEN p.order_id IS NULL THEN 'No Payments/Pending'
+			WHEN o.order_id IS NULL THEN 'Orphan Payments'
+			else 'Good Records/Paid'
+		END
+	
+	-- sales.orders.order_id -> sales.shipments.order_id
+	select 
+		CASE
+			WHEN s.order_id IS NULL THEN 'Not Shipped'
+			WHEN o.order_id IS NULL THEN 'Orphan Shipment'
+			else 'Delivered/Shipped/Returned'
+		END as status,
+		COUNT(*)
+	from sales.orders o
+	FULL JOIN sales.shipments s ON s.order_id = o.order_id
+	GROUP BY 
+		CASE
+			WHEN s.order_id IS NULL THEN 'Not Shipped'
+			WHEN o.order_id IS NULL THEN 'Orphan Shipment'
+			else 'Delivered/Shipped/Returned'
+		END
+	
+	-- stores.stores.store_id -> sales.orders.store_id
+	select 
+		CASE
+			WHEN o.store_id IS NULL THEN 'Orphan Store / No Orders'
+			WHEN s.store_id IS NULL THEN 'Orphan Order'
+			else 'Good Records'
+		END as status,
+		COUNT(*)
+	from stores.stores s
+	FULL JOIN sales.orders o ON o.store_id = s.store_id
+	GROUP BY 
+		CASE
+			WHEN o.store_id IS NULL THEN 'Orphan Store / No Orders'
+			WHEN s.store_id IS NULL THEN 'Orphan Order'
+			else 'Good Records'
+		END
+	
+	-- stores.employees.employee_id -> support.tickets.agent_id
+	select 
+		CASE
+			WHEN t.agent_id IS NULL THEN 'Employee with no tickets'
+			WHEN e.employee_id IS NULL THEN 'Orphan Ticket'
+			else 'Good Records'
+		END as status,
+		COUNT(*)
+	from stores.employees e
+	FULL JOIN support.tickets t ON t.agent_id = e.employee_id
+	GROUP BY
+		CASE
+			WHEN t.agent_id IS NULL THEN 'Employee with no tickets'
+			WHEN e.employee_id IS NULL THEN 'Orphan Ticket'
+			else 'Good Records'
+		END
