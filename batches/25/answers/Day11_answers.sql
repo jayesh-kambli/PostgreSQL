@@ -119,28 +119,20 @@ select cust_id from sales.orders
 	select city from stores.stores
 	
 -- 16)
-	-- All data
-	select o.*, c.first_name || ' ' || c.last_name as cust_name from sales.orders o
-		LEFT JOIN customers.customers c ON o.cust_id = c.customer_id
-	
-	select * from sales.payments p
-		LEFT JOIN sales.orders o USING(order_id)
-	
-	select * from sales.returns r
-		LEFT JOIN products.products p ON p.product_id = r.prod_id
-	
-	
-	-- Answer
-	select o.order_date as date, 'Order' as Type, c.customer_id as customer, o.net_total as amount from sales.orders o
+	select o.order_date as date, 'Order' as Type, c.first_name as customer, o.net_total as amount from sales.orders o
 		LEFT JOIN customers.customers c ON o.cust_id = c.customer_id
 	UNION ALL
-	select p.payment_date as date, 'Payment' as Type, o.cust_id as customer, p.amount as amount from sales.payments p
+	select p.payment_date as date, 'Payment' as Type, c.first_name as customer, p.amount as amount from sales.payments p
 		LEFT JOIN sales.orders o USING(order_id)
-	ORDER BY date,customer
+		LEFT JOIN customers.customers c ON c.customer_id = o.cust_id
 	
-	select * from sales.returns r
-		LEFT JOIN products.products p ON p.product_id = r.prod_id -- no cust data, should use product name/id instead ?, join new tables returns->orders->customers ?
-
+	UNION ALL
+	select r.return_date as date, 'Return' as Type, c.first_name as customer, r.refund_amount as amount  from sales.returns r
+		LEFT JOIN products.products p ON p.product_id = r.prod_id
+		LEFT JOIN sales.orders o USING(order_id)
+		LEFT JOIN customers.customers c ON c.customer_id = o.cust_id
+	ORDER BY date
+	
 -- 17)
 select brand_id from core.dim_brand
 INTERSECT
@@ -209,6 +201,176 @@ ORDER by city
 select e1.first_name || ' ' || e1.last_name as employee1, e2.first_name || ' ' || e2.last_name as employee2, e1.role, e1.store_id from stores.employees e1
 	JOIN stores.employees e2 ON e1.role = e2.role AND e1.store_id =  e2.store_id AND e1.employee_id > e2.employee_id
 
+-- 21)
+select 'customer' as source, email from customers.customers
+UNION
+select 'employee' as source, email from stores.employees
 
-select * from marketing.campaigns
-select * from marketing.ads_spend
+-- 22)
+select product_id from products.products
+EXCEPT
+select prod_id from sales.order_items
+
+-- 23)
+select e1.first_name as emp1, e1.salary as sal_emp1, e2.first_name as emp2, e2.salary as sal_emp2 from stores.employees e1
+	JOIN stores.employees e2 ON e2.dept_id = e1.dept_id AND e2.employee_id < e1.employee_id 
+	WHERE ABS (e1.salary-e2.salary) <=1000
+
+-- 24)
+select 
+	d.dept_name, 
+	roles.role, 
+	count(DISTINCT e.employee_id) as emp_count 
+from core.dim_department d
+CROSS JOIN (select DISTINCT role from stores.employees) roles 
+LEFT JOIN stores.employees e ON e.role = roles.role AND d.dept_id = e.dept_id
+GROUP BY d.dept_name, roles.role
+HAVING count(DISTINCT e.employee_id) = 0
+
+-- 25)
+select s.store_id, s.store_name, mon.month, count(DISTINCT o.order_id) as order_count from stores.stores s
+CROSS JOIN (
+	select generate_series(1, 12, 1) as month
+) mon
+LEFT JOIN sales.orders o ON o.store_id = s.store_id AND EXTRACT('month' from order_date) = mon.month AND EXTRACT('year' from order_date) = 2025
+GROUP BY s.store_id, s.store_name, mon.month
+ORDER BY s.store_id, s.store_name, mon.month
+
+-- 26)
+select main.month, new_o.total_orders+new_r.total_returns as total_activity from (
+	select 
+		extract('month' from order_date) as month
+	FROM sales.orders 
+	WHERE extract('year' from order_date) = 2025
+	GROUP BY extract('month' from order_date)
+	HAVING count(order_id) > 1000
+	
+	INTERSECT
+	
+	select 
+		extract('month' from return_date) as month
+	FROM sales.returns 
+	WHERE extract('year' from return_date) = 2025
+	GROUP BY extract('month' from return_date)
+	HAVING count(return_id) > 50
+) main
+LEFT JOIN (
+	select extract('month' from order_date) as month, count(distinct order_id) as total_orders from sales.orders WHERE extract('year' from order_date) = 2025 GROUP BY extract('month' from order_date)
+) new_o USING(month) 
+LEFT JOIN (
+	select extract('month' from return_date) as month, count(distinct return_id) as total_returns from sales.returns WHERE extract('year' from return_date) = 2025 GROUP BY extract('month' from return_date)
+) new_r USING(month)
+ORDER BY total_activity DESC
+LIMIT 1
+
+-- 27)
+select cust_id from sales.orders
+INTERSECT
+select customer_id from customers.reviews
+
+-- 28)
+select order_date as date, 'Order' as type, net_total as amount from sales.orders
+UNION ALL
+select payment_date as date, 'Payment' as type, amount from sales.payments
+UNION ALL
+select shipped_date as date, 'Shipment' as type, 0 as amount from sales.shipments
+UNION ALL
+select return_date as date, 'Return' as type, refund_amount as amount from sales.returns
+ORDER BY date
+LIMIT 30
+
+-- 29)
+-- cities with stores but not customers - 0
+select DISTINCT city from stores.stores
+EXCEPT
+select DISTINCT city from customers.addresses 
+
+-- cities with customers but no stores - 4 (greater)
+select DISTINCT city from customers.addresses 
+EXCEPT
+select DISTINCT city from stores.stores
+-- company needs to setup stores in 
+-- "Bengaluru"
+-- "Guwahati"
+-- "Muzaffarpur"
+-- "Warangal"
+
+-- 30)
+select e1.store_id,
+CASE
+	WHEN e1.dept_id = e2.dept_id THEN 'Same Dept'
+	WHEN e1.role = e2.role THEN 'Same Role'
+	ELSE 'Cross-Functional'
+END as classification,
+count(*) as pair_count
+from stores.employees e1
+JOIN stores.employees e2 ON e1.store_id = e2.store_id AND e2.employee_id < e1.employee_id 
+GROUP BY e1.store_id,
+CASE
+	WHEN e1.dept_id = e2.dept_id THEN 'Same Dept'
+	WHEN e1.role = e2.role THEN 'Same Role'
+	ELSE 'Cross-Functional'
+END
+ORDER BY store_id
+
+-- 31)
+select d.dept_name, all_employees.*, dept_max_sal_diff.max_sal_diff from (
+	select 
+		emp1.dept_id, 
+		emp1.first_name as emp1_name, 
+		emp1.salary as em1_salary, 
+		emp2.first_name as emp2_name, 
+		emp2.salary as em2_salary, 
+		ABS(emp1.salary - emp2.salary) as salary_difference	 
+	from stores.employees emp1
+	JOIN stores.employees emp2 ON emp1.dept_id = emp2.dept_id AND emp1.employee_id < emp2.employee_id) all_employees
+JOIN ( 
+		select 
+			e1.dept_id, 
+			MAX(ABS(e1.salary - e2.salary)) as max_sal_diff 
+		from stores.employees e1
+		JOIN stores.employees e2 ON e1.dept_id = e2.dept_id AND e1.employee_id < e2.employee_id
+		GROUP BY e1.dept_id
+		ORDER BY dept_id 
+) dept_max_sal_diff on all_employees.dept_id = dept_max_sal_diff.dept_id AND all_employees.salary_difference = dept_max_sal_diff.max_sal_diff
+LEFT JOIN core.dim_department d ON dept_max_sal_diff.dept_id = d.dept_id
+ORDER BY dept_max_sal_diff.dept_id
+
+-- 32)
+select c.category_id, c.category_name, m.month, count(ord.order_item_id) as total_items_sold from core.dim_category c
+CROSS JOIN (
+	select generate_series(1,12,1) as month
+	) m
+LEFT JOIN (
+	select oi.order_item_id, o.order_date, b.category_id from sales.order_items oi
+	JOIN sales.orders o USING(order_id)
+	JOIN products.products p ON oi.prod_id = p.product_id
+	JOIN core.dim_brand b USING(brand_id)
+) ord ON ord.category_id = c.category_id AND EXTRACT('Month' from ord.order_date) = m.month
+GROUP BY c.category_id, m.month
+-- HAVING count(ord.order_item_id) = 0
+ORDER BY c.category_id, c.category_name, m.month
+
+-- 33)
+	-- a
+	select order_date as date, 'Order' as type,  net_total as amount from sales.orders
+	UNION ALL
+	select payment_date as date, 'Payment' as type, amount as amount from sales.payments
+	UNION ALL
+	select return_date as date, 'Return' as type,  refund_amount as amount from sales.returns
+	ORDER BY date, type;
+	-- Here we are getting full timeline reports
+	
+	-- b
+	select order_date as date from sales.orders
+	INTERSECT
+	select payment_date as date from sales.payments
+	INTERSECT
+	select return_date as date from sales.returns
+	-- these are dates where all 3 activites took place (order, payment, returns)
+	
+	-- c
+	select order_date as date from sales.orders
+	EXCEPT
+	select return_date as date from sales.returns
+	-- here we are getting dates on which only orders where placed but no returns
