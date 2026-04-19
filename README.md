@@ -23,4 +23,4 @@ All my solutions are located in:
 
 ## ⚠️ Disclaimer
 
-This is a public repository, so anyone can access it. If you are a student viewing this, please **do not blindly trust my answers** I am also learning and there may be mistakes. Always try to solve the problems on your own first and use this only for reference.
+This is a public repository, so anyone can access it. If you are a student viewing this, please **do not blindly trust my answers** I am also learning and there may be mistakes.
