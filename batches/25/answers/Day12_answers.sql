@@ -394,6 +394,30 @@ LEFT JOIN (
 
 
 
+SELECT 
+    e.first_name,
+    e.dept_id,
+    e.salary,
+    ROUND(AVG(salary) OVER (PARTITION BY dept_id), 2) AS dept_avg_salary,
+    CASE 
+        WHEN salary > AVG(salary) OVER (PARTITION BY dept_id) THEN 'above'
+        WHEN salary < AVG(salary) OVER (PARTITION BY dept_id) THEN 'below'
+        ELSE 'Average'
+    END AS salary_status
+FROM stores.employees e
+ORDER BY dept_id, first_name;
+
+SELECT dept_id, MAX(salary) 
+FROM stores.employees
+GROUP BY dept_id;
+
+ORDER BY salary
+OFFSET 1 LIMIT 2;
+
+
+
+
+
 
 
 
