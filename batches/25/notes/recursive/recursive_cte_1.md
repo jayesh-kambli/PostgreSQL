@@ -301,3 +301,158 @@ while (condition) {
 **SQL loop using previous result**
 
 ---
+
+
+
+# 🟢 Beginner Level — Query-Based QnA
+
+---
+
+## ❓ Q1: Generate numbers from 1 to 3
+
+👉 Expected:
+
+```
+1
+2
+3
+```
+
+### ✅ Query
+
+```sql id="b1"
+WITH RECURSIVE nums AS (
+  SELECT 1 AS n
+  UNION ALL
+  SELECT n + 1
+  FROM nums
+  WHERE n < 3
+)
+SELECT * FROM nums;
+```
+
+### 🧠 Clears Doubt:
+
+👉 Where does `n + 1` come from?
+→ From previous row
+
+---
+
+## ❓ Q2: Generate numbers from 5 to 8
+
+👉 Expected:
+
+```
+5
+6
+7
+8
+```
+
+### ✅ Query
+
+```sql id="b2"
+WITH RECURSIVE nums AS (
+  SELECT 5 AS n
+  UNION ALL
+  SELECT n + 1
+  FROM nums
+  WHERE n < 8
+)
+SELECT * FROM nums;
+```
+
+### 🧠 Clears Doubt:
+
+👉 Start value can be anything (not only 1)
+
+---
+
+## ❓ Q3: Generate numbers in reverse (5 to 1)
+
+👉 Expected:
+
+```
+5
+4
+3
+2
+1
+```
+
+### ✅ Query
+
+```sql id="b3"
+WITH RECURSIVE nums AS (
+  SELECT 5 AS n
+  UNION ALL
+  SELECT n - 1
+  FROM nums
+  WHERE n > 1
+)
+SELECT * FROM nums;
+```
+
+### 🧠 Clears Doubt:
+
+👉 You can decrease also (`n - 1`)
+
+---
+
+## ❓ Q4: Generate even numbers till 10
+
+👉 Expected:
+
+```
+2
+4
+6
+8
+10
+```
+
+### ✅ Query
+
+```sql id="b4"
+WITH RECURSIVE nums AS (
+  SELECT 2 AS n
+  UNION ALL
+  SELECT n + 2
+  FROM nums
+  WHERE n < 10
+)
+SELECT * FROM nums;
+```
+
+### 🧠 Clears Doubt:
+
+👉 Step size can change (`+2`, not only +1)
+
+---
+
+## ❓ Q5: Stop recursion properly
+
+👉 Task:
+Generate numbers but DO NOT include 6
+
+### ✅ Query
+
+```sql id="b5"
+WITH RECURSIVE nums AS (
+  SELECT 1 AS n
+  UNION ALL
+  SELECT n + 1
+  FROM nums
+  WHERE n < 5
+)
+SELECT * FROM nums;
+```
+
+### 🧠 Clears Doubt:
+
+👉 Condition is checked BEFORE next row
+👉 That’s why 6 is not included
+
+---
+
+---
