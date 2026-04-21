@@ -15,8 +15,9 @@ select
 from sales.orders
 
 -- 3)
--- need to add order_id to getting running total else we will get 1 constant value
 select 
 	*,
-	sum(net_total) OVER(ORDER BY order_date, order_id)
+	sum(net_total) OVER(ORDER BY order_date)
 from sales.orders
+
+select * from stores.stores
