@@ -29,4 +29,30 @@ select
 	END
 from sales.orders
 
+--5)
+WITH final_table as (
+	select 
+		created_date,
+		count(ticket_id) as date_total
+	from support.tickets
+	GROUP BY created_date
+)
 
+select *,
+	sum(date_total) OVER(ORDER BY created_date) as cumulative_count
+from final_table
+
+-- 6)
+
+
+
+
+
+
+
+
+select * FROM web_events.page_views
+select * FROM support.tickets
+select * FROM web_events.page_views
+select * FROM web_events.page_views
+select * FROM web_events.page_views
